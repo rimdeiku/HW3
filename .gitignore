@@ -1,0 +1,37 @@
+# Raw sequencing & alignment files
+*.fastq.gz
+*.fq.gz
+*.fastq
+*.fq
+*.sra
+*.sam
+*.bam
+*.bai
+*.cram
+
+# Reference genomes, annotations & indices
+*.fa
+*.fna
+*.fasta
+*.gtf
+*.gff
+*.gff3
+*.fai
+*.mmi
+*.ht2
+*.idx
+*index*/
+*Index*/
+
+# Snakemake & Conda artifacts
+.snakemake/
+conda_envs/
+envs_dir/
+*.log
+*.out
+*.err
+
+# OS & temporary files
+.DS_Store
+*~
+*.tmp

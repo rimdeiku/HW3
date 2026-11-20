@@ -1,0 +1,13 @@
+samples: config/samples.csv
+paired_end: true
+
+outdir: results
+
+fastp:
+  quality: 20
+  length_required: 30
+
+threads:
+  fastqc: 2
+  fastp: 4
+

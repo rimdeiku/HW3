@@ -1,0 +1,5 @@
+sample,condition,fastq_1,fastq_2
+SRR1039520,untreated,data/raw/SRR1039520_1.fastq.gz,data/raw/SRR1039520_2.fastq.gz
+SRR1039508,untreated,data/raw/SRR1039508_1.fastq.gz,data/raw/SRR1039508_2.fastq.gz
+SRR1039521,dexamethasone,data/raw/SRR1039521_1.fastq.gz,data/raw/SRR1039521_2.fastq.gz
+SRR1039522,albuterol,data/raw/SRR1039522_1.fastq.gz,data/raw/SRR1039522_2.fastq.gz

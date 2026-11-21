@@ -22,6 +22,12 @@ def get_fastq_pair(wildcards):
 OUT = config["outdir"]
 LOG = config["logdir"]
 
+GENE_BED = config["reference"]["gene_bed"]
+GENE_BODY_BED = config["reference"]["gene_body_bed"]
+
+BAMS = expand(f"{OUT}/aligned/{{sample}}.sorted.bam", sample=samples)
+BAIS = expand(f"{OUT}/aligned/{{sample}}.sorted.bam.bai", sample=samples)
+
 KALLISTO_INDEX = config["indexes"]["kallisto_index"]
 
 HISAT2_INDEX = config["indexes"]["hisat2_index"]
@@ -55,6 +61,15 @@ rule all:
         f"{OUT}/featurecounts/counts.txt",
         # 2.3 Lygiavimo nereikalaujantis kiekybinis įvertinimas
         expand(f"{OUT}/kallisto/{{sample}}/abundance.tsv", sample=samples),
+        # 2.4 Lygiavimo kokybės vertinimas
+        expand(f"{OUT}/rseqc/{{sample}}.bam_stat.txt", sample=samples),
+        expand(f"{OUT}/rseqc/{{sample}}.infer_experiment.txt", sample=samples),
+        expand(f"{OUT}/rseqc/{{sample}}.read_distribution.txt", sample=samples),
+        expand(f"{OUT}/rseqc/{{sample}}.geneBodyCoverage.txt", sample=samples),
+        expand(f"{OUT}/rseqc/{{sample}}.inner_distance_freq.txt", sample=samples),
+        f"{OUT}/deeptools/correlation_heatmap.png",
+        f"{OUT}/deeptools/pca.png",
+
 
 rule fastqc_raw:
     input:
@@ -244,3 +259,182 @@ rule kallisto_quant:
         kallisto quant -i {input.index} -o {params.outdir} \
                        -t {threads} {input.r1} {input.r2} &> {log}
         """
+
+
+# 2.4 Lygiavimo kokybės vertinimas
+
+# BED12 anotacija RSeQC įrankiams (iš GENCODE GTF)
+rule gtf_to_bed:
+    input:
+        gtf=config["reference"]["annotation"],
+    output:
+        bed=GENE_BED,
+    params:
+        genepred=GENE_BED + ".genepred",
+    conda:
+        "envs/ucsc.yaml"
+    log:
+        f"{LOG}/reference/gtf_to_bed.log",
+    shell:
+        """
+        gtfToGenePred -genePredExt -ignoreGroupsWithoutExons \
+                      {input.gtf} {params.genepred} 2> {log}
+        genePredToBed {params.genepred} {output.bed} 2>> {log}
+        rm -f {params.genepred}
+        """
+
+# a. Suderinimo statistika
+rule rseqc_bam_stat:
+    input:
+        bam=f"{OUT}/aligned/{{sample}}.sorted.bam",
+    output:
+        f"{OUT}/rseqc/{{sample}}.bam_stat.txt",
+    resources:
+        mem_mb=config["memory_mb"]["rseqc"],
+    conda:
+        "envs/rseqc.yaml"
+    log:
+        f"{LOG}/rseqc/{{sample}}.bam_stat.log",
+    shell:
+        "bam_stat.py -i {input.bam} > {output} 2> {log}"
+
+# b. Bibliotekos grandinės specifiškumas (strandedness)
+rule rseqc_infer_experiment:
+    input:
+        bam=f"{OUT}/aligned/{{sample}}.sorted.bam",
+        bed=GENE_BED,
+    output:
+        f"{OUT}/rseqc/{{sample}}.infer_experiment.txt",
+    resources:
+        mem_mb=config["memory_mb"]["rseqc"],
+    conda:
+        "envs/rseqc.yaml"
+    log:
+        f"{LOG}/rseqc/{{sample}}.infer_experiment.log",
+    shell:
+        "infer_experiment.py -r {input.bed} -i {input.bam} > {output} 2> {log}"
+
+# c. Skaitymų pasiskirstymas pagal genomo elementus
+rule rseqc_read_distribution:
+    input:
+        bam=f"{OUT}/aligned/{{sample}}.sorted.bam",
+        bed=GENE_BED,
+    output:
+        f"{OUT}/rseqc/{{sample}}.read_distribution.txt",
+    resources:
+        mem_mb=config["memory_mb"]["rseqc"],
+    conda:
+        "envs/rseqc.yaml"
+    log:
+        f"{LOG}/rseqc/{{sample}}.read_distribution.log",
+    shell:
+        "read_distribution.py -r {input.bed} -i {input.bam} > {output} 2> {log}"
+
+# d (pagalbinė). Transkriptų poaibis gene body coverage skaičiavimui
+rule gene_body_subset:
+    input:
+        GENE_BED,
+    output:
+        GENE_BODY_BED,
+    params:
+        step=config["rseqc"]["gene_body_subsample"],
+    log:
+        f"{LOG}/reference/gene_body_subset.log",
+    shell:
+        "awk -v n={params.step} 'NR % n == 0' {input} > {output} 2> {log}"
+
+# d. Genų kūno padengimas (gene body coverage)
+rule rseqc_gene_body_coverage:
+    input:
+        bam=f"{OUT}/aligned/{{sample}}.sorted.bam",
+        bai=f"{OUT}/aligned/{{sample}}.sorted.bam.bai",
+        bed=GENE_BODY_BED,
+    output:
+        txt=f"{OUT}/rseqc/{{sample}}.geneBodyCoverage.txt",
+        pdf=f"{OUT}/rseqc/{{sample}}.geneBodyCoverage.curves.pdf",
+    params:
+        prefix=f"{OUT}/rseqc/{{sample}}",
+    resources:
+        mem_mb=config["memory_mb"]["rseqc"],
+    conda:
+        "envs/rseqc.yaml"
+    log:
+        f"{LOG}/rseqc/{{sample}}.gene_body_coverage.log",
+    shell:
+        "geneBody_coverage.py -r {input.bed} -i {input.bam} -o {params.prefix} &> {log}"
+
+# e. Vidinis atstumas tarp porinių skaitymų (fragmento ilgio įvertinimui)
+rule rseqc_inner_distance:
+    input:
+        bam=f"{OUT}/aligned/{{sample}}.sorted.bam",
+        bed=GENE_BED,
+    output:
+        freq=f"{OUT}/rseqc/{{sample}}.inner_distance_freq.txt",
+        pdf=f"{OUT}/rseqc/{{sample}}.inner_distance_plot.pdf",
+    params:
+        prefix=f"{OUT}/rseqc/{{sample}}",
+    resources:
+        mem_mb=config["memory_mb"]["rseqc"],
+    conda:
+        "envs/rseqc.yaml"
+    log:
+        f"{LOG}/rseqc/{{sample}}.inner_distance.log",
+    shell:
+        "inner_distance.py -i {input.bam} -r {input.bed} -o {params.prefix} &> {log}"
+
+# f, g. Mėginių koreliacija ir PCA (deepTools)
+rule multibamsummary:
+    input:
+        bams=BAMS,
+        bais=BAIS,
+    output:
+        npz=f"{OUT}/deeptools/multiBamSummary.npz",
+        counts=f"{OUT}/deeptools/multiBamSummary.counts.tab",
+    params:
+        labels=" ".join(samples),
+        bs=config["deeptools"]["bin_size"],
+    threads: config["threads"]["deeptools"]
+    resources:
+        mem_mb=config["memory_mb"]["deeptools"],
+    conda:
+        "envs/deeptools.yaml"
+    log:
+        f"{LOG}/deeptools/multiBamSummary.log",
+    shell:
+        """
+        multiBamSummary bins -b {input.bams} --labels {params.labels} \
+                        -bs {params.bs} -p {threads} \
+                        -o {output.npz} --outRawCounts {output.counts} &> {log}
+        """
+
+rule plot_correlation:
+    input:
+        f"{OUT}/deeptools/multiBamSummary.npz",
+    output:
+        png=f"{OUT}/deeptools/correlation_heatmap.png",
+        matrix=f"{OUT}/deeptools/correlation_matrix.tab",
+    params:
+        method=config["deeptools"]["cor_method"],
+    conda:
+        "envs/deeptools.yaml"
+    log:
+        f"{LOG}/deeptools/plotCorrelation.log",
+    shell:
+        """
+        plotCorrelation -in {input} --corMethod {params.method} \
+                        --whatToPlot heatmap --plotNumbers --skipZeros \
+                        -o {output.png} --outFileCorMatrix {output.matrix} &> {log}
+        """
+
+rule plot_pca:
+    input:
+        f"{OUT}/deeptools/multiBamSummary.npz",
+    output:
+        png=f"{OUT}/deeptools/pca.png",
+        data=f"{OUT}/deeptools/pca_data.tab",
+    conda:
+        "envs/deeptools.yaml"
+    log:
+        f"{LOG}/deeptools/plotPCA.log",
+    shell:
+        "plotPCA -in {input} -o {output.png} --outFileNameData {output.data} &> {log}"

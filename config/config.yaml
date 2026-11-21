@@ -7,6 +7,8 @@ reference:
   genome: reference/GRCh38.primary_assembly.genome.fa
   annotation: reference/gencode.v50.primary_assembly.annotation.gtf
   transcriptome: reference/gencode.v50.transcripts.fa.gz
+  gene_bed: reference/gencode.v50.primary_assembly.annotation.bed12
+  gene_body_bed: reference/gene_body_subset.bed12
 
 indexes:
   hisat2_index: reference/hisat2/GRCh38
@@ -21,6 +23,13 @@ featurecounts:
   feature_type: exon
   attribute: gene_id
 
+rseqc:
+  gene_body_subsample: 50
+
+deeptools:
+ bin_size: 10000
+ cor_method: pearson
+
 threads:
   fastqc: 2
   fastp: 4
@@ -30,9 +39,13 @@ threads:
   featurecounts: 4
   kallisto_index: 4
   kallisto: 4
+  rseqc: 1
+  deeptools: 4
 
 memory_mb:
   hisat2_build: 32000
   hisat2: 16000
   kallisto_index: 16000
   kallisto: 8000
+  rseqc: 8000
+  deeptools: 8000

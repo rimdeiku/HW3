@@ -19,4 +19,5 @@ command -v snakemake >/dev/null || { echo "snakemake nerastas: aktyvuokite aplin
 mkdir -p logs
 snakemake --use-conda \
           --configfile "${CONFIG}" \
-          -c "${SLURM_CPUS_PER_TASK}"
+          -c "${SLURM_CPUS_PER_TASK}" \
+          "${@:2}"

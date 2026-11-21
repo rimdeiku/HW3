@@ -22,6 +22,8 @@ def get_fastq_pair(wildcards):
 OUT = config["outdir"]
 LOG = config["logdir"]
 
+KALLISTO_INDEX = config["indexes"]["kallisto_index"]
+
 HISAT2_INDEX = config["indexes"]["hisat2_index"]
 HISAT2_FILES = multiext(
     HISAT2_INDEX,
@@ -31,7 +33,7 @@ HISAT2_FILES = multiext(
 
 rule all:
     input:
-	# 2.1 Sekų nuskaitymų pirminis apdorojimas
+        # 2.1 Sekų nuskaitymų pirminis apdorojimas
         expand(
             f"{OUT}/fastqc_raw/{{sample}}_{{read}}_fastqc.html",
             sample=samples,
@@ -47,10 +49,12 @@ rule all:
             sample=samples,
             read=[1, 2],
         ),
-	# 2.2 Lygiavimu pagrįstas kiekybinis įvertinimas
+
+        # 2.2 Lygiavimu pagrįstas kiekybinis įvertinimas
         expand(f"{OUT}/aligned/{{sample}}.sorted.bam.bai", sample=samples),
         f"{OUT}/featurecounts/counts.txt",
-
+        # 2.3 Lygiavimo nereikalaujantis kiekybinis įvertinimas
+        expand(f"{OUT}/kallisto/{{sample}}/abundance.tsv", sample=samples),
 
 rule fastqc_raw:
     input:
@@ -195,4 +199,48 @@ rule featurecounts:
         featureCounts -T {threads} -p --countReadPairs \
                       -s {params.strand} -t {params.feature} -g {params.attribute} \
                       -a {input.gtf} -o {output.counts} {input.bams} &> {log}
+        """
+
+
+# 2.3 Lygiavimo nereikalaujantis kiekybinis įvertinimas
+
+# Kallisto indeksas: paleidžiamas tik jei indekso failo nėra
+rule kallisto_index:
+    input:
+        transcriptome=config["reference"]["transcriptome"],
+    output:
+        KALLISTO_INDEX,
+    threads: config["threads"]["kallisto_index"]
+    resources:
+        mem_mb=config["memory_mb"]["kallisto_index"],
+    conda:
+        "envs/kallisto.yaml"
+    log:
+        f"{LOG}/kallisto_index/kallisto_index.log",
+    shell:
+        "kallisto index -i {output} {input.transcriptome} &> {log}"
+
+
+# Transkriptų gausos įvertinimas kiekvienam mėginiui
+rule kallisto_quant:
+    input:
+        r1=f"{OUT}/trimmed/{{sample}}_1.trimmed.fastq.gz",
+        r2=f"{OUT}/trimmed/{{sample}}_2.trimmed.fastq.gz",
+        index=KALLISTO_INDEX,
+    output:
+        tsv=f"{OUT}/kallisto/{{sample}}/abundance.tsv",
+        info=f"{OUT}/kallisto/{{sample}}/run_info.json",
+    params:
+        outdir=f"{OUT}/kallisto/{{sample}}",
+    threads: config["threads"]["kallisto"]
+    resources:
+        mem_mb=config["memory_mb"]["kallisto"],
+    conda:
+        "envs/kallisto.yaml"
+    log:
+        f"{LOG}/kallisto/{{sample}}.log",
+    shell:
+        """
+        kallisto quant -i {input.index} -o {params.outdir} \
+                       -t {threads} {input.r1} {input.r2} &> {log}
         """

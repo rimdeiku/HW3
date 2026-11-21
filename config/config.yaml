@@ -6,9 +6,11 @@ logdir: logs
 reference:
   genome: reference/GRCh38.primary_assembly.genome.fa
   annotation: reference/gencode.v50.primary_assembly.annotation.gtf
+  transcriptome: reference/gencode.v50.transcripts.fa.gz
 
 indexes:
   hisat2_index: reference/hisat2/GRCh38
+  kallisto_index: reference/kallisto/gencode.v50.idx
 
 fastp:
   quality: 20
@@ -26,7 +28,11 @@ threads:
   hisat2: 6
   samtools: 4
   featurecounts: 4
+  kallisto_index: 4
+  kallisto: 4
 
 memory_mb:
   hisat2_build: 32000
   hisat2: 16000
+  kallisto_index: 16000
+  kallisto: 8000

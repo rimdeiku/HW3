@@ -1,13 +1,32 @@
 samples: config/samples.csv
-paired_end: true
 
 outdir: results
+logdir: logs
+
+reference:
+  genome: reference/GRCh38.primary_assembly.genome.fa
+  annotation: reference/gencode.v50.primary_assembly.annotation.gtf
+
+indexes:
+  hisat2_index: reference/hisat2/GRCh38
 
 fastp:
   quality: 20
   length_required: 30
 
+featurecounts:
+  strandness: 0
+  feature_type: exon
+  attribute: gene_id
+
 threads:
   fastqc: 2
   fastp: 4
+  hisat2_build: 8
+  hisat2: 6
+  samtools: 4
+  featurecounts: 4
 
+memory_mb:
+  hisat2_build: 32000
+  hisat2: 16000

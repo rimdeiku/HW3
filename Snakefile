@@ -69,7 +69,8 @@ rule all:
         expand(f"{OUT}/rseqc/{{sample}}.inner_distance_freq.txt", sample=samples),
         f"{OUT}/deeptools/correlation_heatmap.png",
         f"{OUT}/deeptools/pca.png",
-
+        # 2.4 Ataskaita
+        f"{OUT}/multiqc/multiqc_report.html",
 
 rule fastqc_raw:
     input:
@@ -424,6 +425,7 @@ rule plot_correlation:
         plotCorrelation -in {input} --corMethod {params.method} \
                         --whatToPlot heatmap --plotNumbers --skipZeros \
                         -o {output.png} --outFileCorMatrix {output.matrix} &> {log}
+        sed -i '1i #plotCorrelation --outFileCorMatrix' {output.matrix}
         """
 
 rule plot_pca:
@@ -437,4 +439,39 @@ rule plot_pca:
     log:
         f"{LOG}/deeptools/plotPCA.log",
     shell:
-        "plotPCA -in {input} -o {output.png} --outFileNameData {output.data} &> {log}"
+        """
+        plotPCA -in {input} -o {output.png} --outFileNameData {output.data} &> {log}
+        sed -i '1i #plotPCA --outFileNameData' {output.data}
+        """
+
+# 2.4 Ataskaita: visų rezultatų ir logų suvestinė (MultiQC)
+rule multiqc:
+    input:
+        expand(f"{OUT}/fastqc_raw/{{sample}}_{{read}}_fastqc.zip", sample=samples, read=[1, 2]),
+        expand(f"{OUT}/fastqc_trimmed/{{sample}}_{{read}}.trimmed_fastqc.zip", sample=samples, read=[1, 2]),
+        expand(f"{OUT}/fastp/{{sample}}.json", sample=samples),
+        BAIS,
+        f"{OUT}/featurecounts/counts.txt.summary",
+        expand(f"{OUT}/kallisto/{{sample}}/run_info.json", sample=samples),
+        expand(f"{OUT}/rseqc/{{sample}}.bam_stat.txt", sample=samples),
+        expand(f"{OUT}/rseqc/{{sample}}.infer_experiment.txt", sample=samples),
+        expand(f"{OUT}/rseqc/{{sample}}.read_distribution.txt", sample=samples),
+        expand(f"{OUT}/rseqc/{{sample}}.geneBodyCoverage.txt", sample=samples),
+        expand(f"{OUT}/rseqc/{{sample}}.inner_distance_freq.txt", sample=samples),
+        f"{OUT}/deeptools/correlation_matrix.tab",
+        f"{OUT}/deeptools/pca_data.tab",
+    output:
+        html=f"{OUT}/multiqc/multiqc_report.html",
+    params:
+        outdir=f"{OUT}/multiqc",
+    resources:
+        mem_mb=config["memory_mb"]["multiqc"],
+    conda:
+        "envs/multiqc.yaml"
+    log:
+        f"{LOG}/multiqc/multiqc.log",
+    shell:
+        """
+        multiqc {OUT} {LOG} -o {params.outdir} -n multiqc_report \
+                --force --ignore "*multiqc*" &> {log}
+        """

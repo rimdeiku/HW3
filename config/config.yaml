@@ -35,11 +35,10 @@ threads:
   fastp: 4
   hisat2_build: 8
   hisat2: 6
-  samtools: 4
+  samtools: 2
   featurecounts: 4
   kallisto_index: 4
   kallisto: 4
-  rseqc: 1
   deeptools: 4
 
 memory_mb:
@@ -49,3 +48,4 @@ memory_mb:
   kallisto: 8000
   rseqc: 8000
   deeptools: 8000
+  multiqc: 4000
